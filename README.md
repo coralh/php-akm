@@ -28,13 +28,14 @@ $ sudo make install
 extension=akm.so
 akm.enable=On|Off
 akm.dict_dir=/home/dict
+akm.revalidate_freq=0
 ```
 
 说明：
 
 - `akm.enable`表示扩展启用或关闭
 - `akm.dict_dir`用来指定关键词词典所在的文件夹
-
+- `akm.revalidate_freq`用来表示多长时间去检查词典文件更新，单位为“秒”，如设置为0，则永不更新。备注：如果词典文件较大，频繁更新可能会占用较多资源（文件未改动不会更新），请慎重设置。
 
 ## 函数说明
 

@@ -40,6 +40,7 @@ static int le_akm;
 
 static int   akm_enable = 0;
 static char *akm_dict_dir = NULL;
+static int   akm_revalidate_freq = 0;
 
 static HashTable *akm_dict_ht = NULL;
 
@@ -255,9 +256,24 @@ ZEND_INI_MH(php_akm_dict_dir)
     return SUCCESS;
 }
 
+ZEND_INI_MH(php_akm_revalidate_freq)
+{
+    if (!new_value || new_value->len == 0) {
+        return FAILURE;
+    }
+
+    akm_revalidate_freq = atoi(new_value->val);
+    if (akm_revalidate_freq < 0) {
+        akm_revalidate_freq = 0;
+    }
+
+    return SUCCESS;
+}
+
 PHP_INI_BEGIN()
     PHP_INI_ENTRY("akm.enable", "0", PHP_INI_ALL, php_akm_enable)
     PHP_INI_ENTRY("akm.dict_dir", "", PHP_INI_ALL, php_akm_dict_dir)
+    PHP_INI_ENTRY("akm.revalidate_freq", "0", PHP_INI_ALL, php_akm_revalidate_freq)
 PHP_INI_END()
 /* }}} */
 

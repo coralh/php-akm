@@ -59,5 +59,13 @@ if test "$PHP_AKM" != "no"; then
   dnl
   dnl PHP_SUBST(AKM_SHARED_LIBADD)
 
-  PHP_NEW_EXTENSION(akm, akm.c ahocorasick/ahocorasick.c ahocorasick/mpool.c ahocorasick/node.c ahocorasick/replace.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
+  PHP_NEW_EXTENSION(akm, \
+  	akm.c \
+	ahocorasick/ahocorasick.c \
+	ahocorasick/mpool.c \
+	ahocorasick/node.c \
+	ahocorasick/replace.c \
+	ncx_mempool/ncx_lock.c \
+	ncx_mempool/ncx_slab.c \
+	hash.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
 fi
