@@ -30,6 +30,9 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <time.h>
+#include "shm.h"
+#include "dict.h"
 
 /* If you declare any globals in php_akm.h uncomment this:
    ZEND_DECLARE_MODULE_GLOBALS(akm)

@@ -17,6 +17,9 @@ PHP_ARG_ENABLE(akm, whether to enable akm support,
 Make sure that the comment is aligned:
 [  --enable-akm           Enable akm support])
 
+AC_ARG_ENABLE([shm],
+  AS_HELP_STRING([--disable-shm], [Disable shared memory, only for apache]))
+
 if test "$PHP_AKM" != "no"; then
   dnl Write more examples of tests here...
 
@@ -59,13 +62,17 @@ if test "$PHP_AKM" != "no"; then
   dnl
   dnl PHP_SUBST(AKM_SHARED_LIBADD)
 
+  AS_IF([test "x$enable_shm" != "xno"], [
+    AC_DEFINE(USING_SHM, 1, [using shared memory])
+  ])
+
   PHP_NEW_EXTENSION(akm, \
   	akm.c \
 	ahocorasick/ahocorasick.c \
 	ahocorasick/mpool.c \
 	ahocorasick/node.c \
 	ahocorasick/replace.c \
-	ncx_mempool/ncx_lock.c \
-	ncx_mempool/ncx_slab.c \
-	hash.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
+	lock.c \
+	shm.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
 fi
+
