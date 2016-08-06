@@ -152,9 +152,9 @@ void *mpool_malloc (struct mpool *pool, size_t size)
     {
         /* Allocate a new block */
         block_size = ((size > block->size) ? size : block->size);
-	new_block = mpool_new_block (block_size);
-	new_block->next = block;
-	block = pool->block = new_block;
+        new_block = mpool_new_block (block_size);
+        new_block->next = block;
+        block = pool->block = new_block;
     }
 
     ret = block->free;

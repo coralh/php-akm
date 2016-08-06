@@ -73,6 +73,7 @@ if test "$PHP_AKM" != "no"; then
 	ahocorasick/node.c \
 	ahocorasick/replace.c \
 	lock.c \
+	dict.c \
 	shm.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
 fi
 

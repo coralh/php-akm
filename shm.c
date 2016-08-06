@@ -2,6 +2,9 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+#include <sys/errno.h>
 
 #define SHM_OFFSET (sizeof(size_t))
 #define SHM_HEAD_PTR(ptr) ((void *)(((unsigned char *)ptr) - SHM_OFFSET))
@@ -10,25 +13,19 @@
 
 void *akm_shm_alloc(size_t size)
 {
-    int fd;
     void *ptr;
-    fd = open("/dev/zero", O_RDWR);
-    if (fd == -1) {
-        return NULL;
-    }
-
     size += SHM_OFFSET; // first byte store shm size
+    size = AKM_SMM_ALIGNED_SIZE(size); // memory aligned
 
-    ptr = (void *)mmap(NULL, size, PROT_READ | PROT_WRITE,
-            MAP_SHARED, fd, 0);
+    ptr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
     if (ptr == MAP_FAILED) {
+        printf("cannot alloc shm:%d (%d)\n", __LINE__, errno);
         return NULL;
     }
 
-    ptr += SHM_OFFSET;
+    ptr = ((unsigned char *)ptr) + SHM_OFFSET;
     SHM_SIZE(ptr) = size;
-
-    close(fd);
     return ptr;
 }
 
@@ -49,5 +46,9 @@ void *akm_shm_realloc(void *ptr, size_t size)
 
 void akm_shm_free(void *ptr)
 {
-    munmap(SHM_HEAD_PTR(ptr), SHM_SIZE(ptr));
+    if (ptr == NULL) {
+        return;
+    }
+    if (SHM_SIZE(ptr))
+        munmap(SHM_HEAD_PTR(ptr), SHM_SIZE(ptr));
 }

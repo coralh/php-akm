@@ -45,111 +45,13 @@ static int   akm_enable = 0;
 static char *akm_dict_dir = NULL;
 static int   akm_revalidate_freq = 0;
 
-static HashTable *akm_dict_ht = NULL;
-
-#define DELIMITER '|'
+static struct list_head akm_dict_list;
 
 /**
  * {{{ akm_dict_ht
  */
 
-static inline void akm_build_node(akm_trie_t *trie, char *keyword,
-        size_t keyword_len, char *extension)
-{
-    akm_pattern_t patt;
-
-    /* Fill the pattern data */
-    patt.ptext.astring = keyword;
-    patt.ptext.length  = keyword_len;
-
-    /* The replacement pattern is not applicable in this program, so better
-     * to initialize it with 0 */
-    patt.rtext.astring = NULL;
-    patt.rtext.length  = 0;
-
-    patt.id.u.stringy = extension;
-    patt.id.type      = AKM_PATTID_TYPE_STRING;
-
-    /* Add pattern to automata */
-    akm_trie_add (trie, &patt, 1);
-}
-
-static void akm_build_tree(char *filename, char *fullpath)
-{
-    php_stream *stream;
-    char       *line;
-    size_t      line_len = 0, i;
-
-    char       *keyword,
-               *extension;
-    size_t      keyword_len;
-
-    struct stat st;
-
-    stat(fullpath, &st);
-    if (st.st_size == 0) {
-        return;
-    }
-
-    /* add to HashTable */
-    akm_trie_t *trie = akm_trie_create ();
-    zval ztrie;
-    ZVAL_PTR(&ztrie, trie);
-
-    zend_hash_add(akm_dict_ht,
-            zend_string_init(filename, strlen(filename), 1),
-            &ztrie);
-
-    stream = php_stream_open_wrapper(fullpath, "r", REPORT_ERRORS, NULL);
-    if (!stream) {
-        return;
-    }
-
-    while (NULL != (line = php_stream_get_line(stream, NULL, 0, &line_len))) {
-        /* remove \r\n */
-        if (line[line_len - 1] == '\n') {
-            line[line_len - 1] = '\0';
-        }
-
-        if (line[line_len - 2] == '\r') {
-            line[line_len - 2] = '\0';
-        }
-        line_len = strlen(line);
-
-        if (line_len == 0 || line[0] == DELIMITER) {
-            continue;
-        }
-
-        /* find delimiter */
-        keyword     = line;
-        keyword_len = 0;
-        extension   = NULL;
-        for (i = 0; i < line_len; i++) {
-            if (line[i] == DELIMITER) {
-                keyword_len = i;
-                break;
-            }
-        }
-
-        if (keyword_len == 0) { /* not found */
-            keyword_len = line_len;
-        } else {
-            if (keyword_len + 1 == line_len) { /* example: "keyword|" */
-                keyword_len = line_len - 1;
-            } else {
-                extension = keyword + keyword_len + 1;
-            }
-        }
-
-        akm_build_node(trie, keyword, keyword_len, extension);
-        efree(line);
-    }
-
-    akm_trie_finalize (trie);
-}
-
-static int akm_scan_directory(char *dirname,
-        void (*callback)(char *filename, char *fullpath))
+static int akm_scan_directory(char *dirname)
 {
     int success = 0;
     char fullpath[PATH_MAX] = { 0 };
@@ -163,7 +65,12 @@ static int akm_scan_directory(char *dirname,
     while (NULL != (ent = readdir(dir))) {
         if (ent->d_type == DT_REG) {
             sprintf(fullpath, "%s%s", dirname, ent->d_name);
-            callback(ent->d_name, fullpath);
+            akm_dict_t *dict = akm_dict_new(ent->d_name, fullpath);
+            if (dict == NULL) {
+                php_error_docref(NULL, E_ERROR, "Cannot initialization dict:%s", fullpath);
+                continue;
+            }
+            list_add_tail(&dict->link, &akm_dict_list);
             success++;
         }
     }
@@ -173,18 +80,12 @@ static int akm_scan_directory(char *dirname,
 
 static int akm_dict_ht_init()
 {
-    akm_dict_ht = pemalloc(sizeof(HashTable), 1);
-    if (akm_dict_ht == NULL) {
-        php_error_docref(NULL, E_ERROR, "Cannot alloc memory");
-        return -1;
-    }
-
-    zend_hash_init(akm_dict_ht, 0, NULL, ZVAL_PTR_DTOR, 1);
+    INIT_LIST_HEAD(&akm_dict_list);
     if (access(akm_dict_dir, R_OK) < 0) {
         php_error_docref(NULL, E_ERROR, "Cannot access directory %s", akm_dict_dir);
         return -1;
     }
-    if (akm_scan_directory(akm_dict_dir, akm_build_tree) < 0) {
+    if (akm_scan_directory(akm_dict_dir) < 0) {
         php_error_docref(NULL, E_ERROR, "Cannot open directory %s", akm_dict_dir);
         return -1;
     }
@@ -193,29 +94,24 @@ static int akm_dict_ht_init()
 
 static void akm_dict_ht_free()
 {
-    if (akm_dict_ht) {
-        zend_string *key;
-        zval *value;
-        zend_ulong idx;
-        akm_trie_t *trie;
+    akm_dict_t *dict;
+    struct list_head *e, *n;
 
-        ZEND_HASH_FOREACH_KEY_VAL(akm_dict_ht, idx, key, value) {
-
-            zend_string_free(key);
-            trie = Z_PTR_P(value);
-            akm_trie_release (trie);
-
-        } ZEND_HASH_FOREACH_END();
-
-        pefree(akm_dict_ht, 1);
+    list_for_each_safe(e, n, &akm_dict_list) {
+        dict = list_entry(e, akm_dict_t, link);
+        list_del(e);
+        akm_dict_free(dict);
     }
 }
 
 static akm_trie_t *akm_get_trie(zend_string *key)
 {
-    zval *trie = zend_hash_find(akm_dict_ht, key);
-    if (trie) {
-        return Z_PTR_P(trie);
+    akm_dict_t *dict = akm_dict_find(&akm_dict_list, ZSTR_VAL(key));
+    if (dict) {
+        if (dict->is_free == 1) {
+            return NULL;
+        }
+        return dict->trie;
     }
     return NULL;
 }
@@ -509,10 +405,7 @@ PHP_FUNCTION(akm_get_dict_list)
     zend_ulong idx;
     akm_trie_t *trie;
 
-    ZEND_HASH_FOREACH_KEY_VAL(akm_dict_ht, idx, key, value) {
-        ZVAL_NEW_STR(&dict, key);
-        zend_hash_index_add(Z_ARRVAL_P(return_value), zend_array_count(Z_ARRVAL_P(return_value)), &dict);
-    } ZEND_HASH_FOREACH_END();
+    // todo
 }
 
 
@@ -554,8 +447,9 @@ PHP_MSHUTDOWN_FUNCTION(akm)
 {
     UNREGISTER_INI_ENTRIES();
 
-    akm_dict_ht_free();
-
+    if (akm_enable) {
+        akm_dict_ht_free();
+    }
     return SUCCESS;
 }
 /* }}} */
